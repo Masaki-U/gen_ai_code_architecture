@@ -13,6 +13,8 @@ on:
 
 jobs:
   call-update:
+    permissions:
+      contents: write # リポジトリへの書き込み権限を付与
     # 再利用可能なワークフローのパスとブランチを指定
     uses: Masaki-U/gen_ai_code_architecture/.github/workflows/update-directory-reusable.yml@main
     with:
