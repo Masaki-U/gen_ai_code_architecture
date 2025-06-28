@@ -1,17 +1,19 @@
 # .github/workflows/update-directory-reusable.yml
 name: Reusable: Update Directory from Template
 
+# 更新元のテンプレートリポジトリのURLを定数として定義
+# ここをあなたのテンプレートリポジトリのURLに置き換えてください
+env:
+  TEMPLATE_REPO_URL: 'https://github.com/Masaki-U/gen_ai_code_architecture.git' # 例: https://github.com/your-org/prompts-template.git
+
 # このワークフローが他のワークフローから呼び出されることを定義します。
 on:
   workflow_call:
     inputs:
-      source_repo:
-        description: '更新元となるテンプレートリポジトリのURL (例: https://github.com/your-org/template-repo)'
-        required: true
-        type: string
       target_directory:
-        description: '現在のリポジトリ内で更新対象となるディレクトリのパス (例: my-prompts)'
-        required: true
+        description: '現在のリポジトリ内で更新対象となるディレクトリのパス'
+        required: false # デフォルト値があるため必須ではありません
+        default: 'system_architecture' # ここにデフォルト値を設定
         type: string
       branch:
         description: '変更をプッシュするブランチ名'
@@ -45,7 +47,7 @@ jobs:
       - name: Checkout source template repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.source_repo }}
+          repository: ${{ env.TEMPLATE_REPO_URL }} # 定数として定義したURLを使用
           path: ./.template_temp # テンプレートリポジトリを一時ディレクトリにチェックアウト
           token: ${{ secrets.GH_TOKEN }}
 
@@ -82,6 +84,6 @@ jobs:
           # 変更がなければコミットしない
           git add ${{ inputs.target_directory }}
           git diff --cached --exit-code --quiet || \
-          (git commit -m "Automated update of ${{ inputs.target_directory }} from ${{ inputs.source_repo }}" && \
+          (git commit -m "Automated update of ${{ inputs.target_directory }} from ${{ env.TEMPLATE_REPO_URL }}" && \
            git push origin ${{ inputs.branch }}) || \
            echo "No changes to commit or push."
