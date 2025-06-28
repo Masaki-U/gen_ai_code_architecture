@@ -20,4 +20,4 @@ jobs:
       # target_directory: 'your-custom-directory' # デフォルト値を使わない場合はここで上書きできます
       branch: 'main' # 変更をプッシュしたいブランチ名（例: main, dev など）
     secrets:
-      GH_TOKEN: ${{ secrets.GH_TOKEN }} # リポジトリのシークレットからGH_TOKENを渡す
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # リポジトリのシークレットからGH_TOKENを渡す
