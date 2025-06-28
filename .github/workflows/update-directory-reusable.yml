@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ env.TEMPLATE_REPO_URL }} # 定数として定義したURLを使用
-          path: ./.template_temp # テンプレートリポジトリを一時ディレクトリにチェックアウト
+          path: .template_temp # テンプレートリポジトリを一時ディレクトリにチェックアウト
           token: ${{ secrets.GH_TOKEN }}
 
       - name: Copy and update directory
