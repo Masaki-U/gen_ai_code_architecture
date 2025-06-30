@@ -1,58 +1,108 @@
-# 👢️ Root Design – Hierarchical Modular Monolith
+# 生成AIが保守しやすいサーバー実装 ― 基本設計ガイド（Model / UseCase / Layout 版）
 
-> **Goal**  
-> Package-by-feature を基本に、機能ごとにレイヤ深度が変わる “Unbalanced Tree” を構築する。  
-> 生成 AI は各ディレクトリ直下の `README.md` のみ読んで実装を生成する。
-
----
-
-## 1. レイヤ定義
-
-| レイヤ | 役割 | 備考 |
-|-------|------|------|
-| **abstract/** | 状態保持・ユースケース・DI | 常に存在（最深） |
-| **intermediate/** (0-n) | Routing / UI Composition / Mapper / Memo | **必要になったら**挿入 |
-| **concrete/** | Atomic UI・Data Binding | 常に最深 |
+* **package-by-feature × Unbalanced Tree 多層構造**  
+* **1 ファイル = 150 行以内**  
+* **デメテルの法則（LoD）厳守でコンテキスト最小化**  
+* **すべてのディレクトリに `README.md` 必須**  
+* **各ディレクトリは `Model.kt`・`UseCase.kt`・`Layout.kt` のみを持つ**  
+  *下位層ほど “読むだけ” を徹底。動的プロパティ (`var`) は最上位層のみ許可*
 
 ---
 
-## 2. レイヤ追加ルール
+## 1. ディレクトリ階層例
 
-- **開始時は 2 層**: `abstract/` + `concrete/`  
-- 追加判定 ( いずれか証明 )  
-  - クラス > 100 LOC が 3 つ以上  
-  - 外部依存 > 5  
-  - モック > 3  
-- 抽出したクラスを `intermediate/` へ移動し新 `README.md` を作成  
-- さらに背大化したら `intermediate/detail/` …と掘る
-
----
-
-## 3. README 必須項目
-
+```text
+src/
+ ├── common/
+ │   ├── Model.kt
+ │   ├── UseCase.kt
+ │   ├── Layout.kt
+ │   └── README.md
+ ├── user/                   # ≪ユーザー機能≫（中規模）
+ │   ├── Model.kt
+ │   ├── UseCase.kt
+ │   ├── Layout.kt
+ │   └── README.md
+ ├── health/                 # ≪死活監視≫（小規模）
+ │   ├── Model.kt
+ │   ├── UseCase.kt
+ │   ├── Layout.kt
+ │   └── README.md
+ ├── payment/                # ≪決済機能≫（大規模）
+ │   ├── Model.kt
+ │   ├── UseCase.kt
+ │   ├── Layout.kt
+ │   ├── refund/             # サブ機能（Unbalanced 深掘り）
+ │   │   ├── Model.kt
+ │   │   ├── UseCase.kt
+ │   │   ├── Layout.kt
+ │   │   └── README.md
+ │   └── README.md
+ └── README.md               # ルート概要
 ```
-# <Layer> – <役割>
-## Scope      : 何をするか
-## Excludes   : 何をしないか
-## Interfaces : 公開 I/F（メソッド・イベント）
-## DependsOn  : 上位/下位レイヤ
-## Extracted-From (初回のみ) : どのクラスを移動したか
+
+> **階層ポリシー**  
+> - **上位層 → 下位層** への一方向利用のみ許可  
+> - **Model → UseCase → Layout** の依存は *隣接層* のみ（深い呼び出し禁止）  
+> - 下位層 (`health/` など) のファイルは **再代入不可 (`val`/`const`) とラムダ** のみを保持  
+
+---
+
+## 2. README.md テンプレート（全ディレクトリ共通）
+
+```md
+# <ディレクトリ名>
+
+## 役割
+<機能概要を 2〜3 行で説明>
+
+## ファイル一覧
+| ファイル | 責務 | LoD チェックポイント |
+| -------- | ---- | -------------------- |
+| Model.kt  | 不変データ / 値オブジェクト | - 外部の深い構造にアクセスしない |
+| UseCase.kt| ユースケース / 処理フロー | - Model へのみ依存<br>- 動的プロパティ禁止 (`val` のみ) |
+| Layout.kt | I/O レイヤ (Controller/UI) | - UseCase へのみ依存<br>- a.b.c チェーン禁止 |
+
+## 公開インターフェース
+| 種別 | エンドポイント / エントリ | 概要 |
+| ---- | ----------------------- | ---- |
+| HTTP | GET /users/{id}         | ユーザー詳細取得 |
+| FUNC | UserUseCase.exec()      | アプリケーションサービス |
+
+## 依存関係
+- depends-on: `common`
+- no-depends: `<下層>.*/Layout.kt` 以外
+
+## 動的プロパティ規約
+- **最上位層**（`src/` 直下）の `Model.kt` のみ `var` を許可  
+- それ以外は **再代入禁止 (`val`)** + **ラムダ** で状態遷移を表現
+
+## 生成AI へのヒント
+1. この README が最上位の要約  
+2. 1 ファイル 150 行 / 1 関数 30 行以内  
+3. ディレクトリ外部へは公開 API だけを公開  
+4. テストは `example/*.spec.kt` に配置
 ```
 
-1–2 分で読める長さに抑え、コードで分かる詳細は書かない。
+---
+
+## 3. ファイル役割サマリ
+
+| ファイル | 型／構造                     | 主な内容                          | ルール |
+| -------- | --------------------------- | --------------------------------- | ------ |
+| **Model.kt**  | `data class` / value class      | 不変エンティティ、DTO、Enum        | - `val`/`const` のみ<br>- 外部ライブラリ呼び出し禁止 |
+| **UseCase.kt**| `class` / `object`             | ユースケース、CQRS、バリデーション | - Model にのみ依存<br>- 副作用はラムダ注入 |
+| **Layout.kt** | `class` / controller / endpoint | I/O バインド (HTTP/GraphQL/UI)     | - UseCase にのみ依存<br>- 表示ロジックは ViewModel 等へ委譲 |
 
 ---
 
-## 4. 生成 AI ワークフロー
+## 4. 実装 Tips
 
-1. 指定ディレクトリを提示  
-2. AI は同階層 `README.md` の責務を実装  
-3. コード背大化 → レイヤ追加 → README 更新 → ループ
+1. **ディレクトリ＝境界**。別 feature への参照は `common/` 経由か HTTP/Message 経由のみ  
+2. **値オブジェクトでカプセル化** → LLM のコンテキスト縮小 & LoD 遵守  
+3. **最上位層でのみ mutable**、他層は pure function 構成で “事故” を防止  
+4. **README 生成をテンプレ化** → PR 時に漏れを CI で検出  
 
 ---
 
-## 5. ガバナンス
-
-- PR で **README 更新チェック** を必須  
-- CI グリーン必須  
-- README とコードが不一致の場合は“意図” を優先しレイヤ再編を検討
+必要に応じて、ここから言語／フレームワーク固有の実装サンプルや CI 設定を拡張してください。
